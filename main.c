@@ -33,8 +33,6 @@ JOY joystick = {
     .button = 22
 };
 
-// Definindo a máscara para ativar a output GPIO 
-#define OUTPUT_MASK ((1 << rgb.blue) | (1 << rgb.green) | (1 << rgb.red))
 // Definindo a máscara para ativar a input GPIO
 #define INPUT_MASK ((1 << button.a) | (1 << button.b) | (1 << joystick.button))
 
@@ -112,16 +110,16 @@ int64_t turn_off_callback(alarm_id_t id, void *user_data){
     }
 
     if(callback_count%2 == 0){
-        gpio_put(rgb.blue, 1);
-        gpio_put(rgb.red, 1);
-        gpio_put(rgb.green, 1);
+        pwm_set_gpio_level(rgb.blue, 300);
+        pwm_set_gpio_level(rgb.green, 300);
+        pwm_set_gpio_level(rgb.red, 300);
         pwm_set_gpio_level(buzzer.a, 300);
         pwm_set_gpio_level(buzzer.b, 300);
     }
     else{
-        gpio_put(rgb.blue, 0);
-        gpio_put(rgb.red, 0);
-        gpio_put(rgb.green, 0);
+        pwm_set_gpio_level(rgb.blue, 0);
+        pwm_set_gpio_level(rgb.green, 0);
+        pwm_set_gpio_level(rgb.red, 0);
         pwm_set_gpio_level(buzzer.a, 0);
         pwm_set_gpio_level(buzzer.b, 0);
     }
@@ -240,16 +238,19 @@ int main(){
     ssd1306_fill(&ssd, false);
     ssd1306_send_data(&ssd);
 
-    // Inicializando a máscara da GPIO dos Leds
-    gpio_init_mask(OUTPUT_MASK);
-    // Definindo como saída
-    gpio_set_dir_out_masked(OUTPUT_MASK);
-
     // Inicializando o PWM dos buzzers zerado
     buzzer_init(buzzer.a, wrap);
     buzzer_init(buzzer.b, wrap);
     pwm_set_gpio_level(buzzer.a, 0);
     pwm_set_gpio_level(buzzer.b, 0);
+
+    // Inicializando o PWM dos LEDs RGB zerado
+    buzzer_init(rgb.blue, wrap);
+    buzzer_init(rgb.green, wrap);
+    buzzer_init(rgb.red, wrap);
+    pwm_set_gpio_level(rgb.blue, 0);
+    pwm_set_gpio_level(rgb.green, 0);
+    pwm_set_gpio_level(rgb.red, 0);
 
     // Iniciando os pinos dos botões
     gpio_init_mask(INPUT_MASK);

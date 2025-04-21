@@ -3,6 +3,10 @@
 #include "libs/structs.h"
 #include "hardware/pwm.h"
 #include "hardware/adc.h"
+#include "libs/font.h"
+#include "libs/ssd1306.h"
+#include "hardware/i2c.h"
+#include "pico/rand.h"
 
 // Definindo os pinos do Led RGB
 LEDs rgb = { 
@@ -41,6 +45,18 @@ uint clkdiv = 125;
 // Variável para o debounce (armazena tempo)
 uint32_t last_time = 0; 
 
+// Posições aleatórias do quadrado do jogo
+uint8_t pos_x=31, pos_y=0;
+
+// Definições para o I2C e display 
+#define I2C_PORT i2c1
+#define I2C_SDA 14
+#define I2C_SCL 15
+#define DISPLAY_ADDRESS 0x3C
+ssd1306_t ssd; // Inicializa a estrutura do display no escopo global
+bool cor = true; // Booleano que indica a cor branca do pixel
+
+
 // Função de interrupção da GPIO
 void gpio_irq_handler(uint gpio, uint32_t events){
     // Obtendo tempo atual (em us)
@@ -58,6 +74,10 @@ void gpio_irq_handler(uint gpio, uint32_t events){
 
         else if(gpio == joystick.button){
             pwm_set_gpio_level(buzzer.a, 0);
+            // Sorteia a posição do quadrado aleatório do game
+            pos_x = 31 + ((uint8_t)get_rand_32() % 56); // Aleatório no range [31,86] (86 por conta do limite do frame central)
+            pos_y = (uint8_t)get_rand_32() % 56; // Aleatório no range [0,55] (56 por conta do limite do frame central)
+            
         }
     }
 }
@@ -82,8 +102,45 @@ void buzzer_init(uint gpio, uint wrap){
     pwm_set_enabled(slice_num, true); 
 }
 
+// Função que interpreta a posição do eixo X no display
+int choice_display_x(int joy_input){
+    if(joy_input < 2048){
+        return -(2047-joy_input)/(2047/27);
+    }
+    else{
+        return (joy_input-2048)/(2047/27);
+    }
+}
+
+// Função que interpreta a posição do eixo Y no display
+int choice_display_y(int joy_input){
+    if(joy_input < 2048){
+        return (2047-joy_input)/(2047/27);
+    }
+    else{
+        return -(joy_input-2048)/(2047/27);
+    }
+}
+
 int main(){
     stdio_init_all();
+
+    // Configurações do I2C e Display 
+    // Inicializando o I2C
+    i2c_init(I2C_PORT, 400*1000);
+    // Setando as funções dos pinos do I@C
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    // Garantindo o Pull up do I2C
+    gpio_pull_up(I2C_SDA);
+    gpio_pull_up(I2C_SCL);
+    // Configuração do display
+    ssd1306_init(&ssd, WIDTH, HEIGHT, false, DISPLAY_ADDRESS, I2C_PORT); // Inicializa o display
+    ssd1306_config(&ssd); // Configura o display
+    ssd1306_send_data(&ssd); // Envia os dados para o display
+    // Limpa o display. O display inicia com todos os pixels apagados.
+    ssd1306_fill(&ssd, false);
+    ssd1306_send_data(&ssd);
 
     // Inicializando a máscara da GPIO dos Leds
     gpio_init_mask(OUTPUT_MASK);
@@ -136,6 +193,23 @@ int main(){
         if (joystick.vrx_value>=1900 && joystick.vrx_value<=2194){
             joystick.vrx_value=2048;
         }
+
+
+        // DISPLAY I2C
+        // Limpa o display
+        ssd1306_fill(&ssd, false);
+        // Desenhando o frame do jogo
+        ssd1306_rect(&ssd, 0, 31, 64, 64, cor, !cor);
+
+        // Desenha o quadrado aleatório do game
+        ssd1306_draw_char(&ssd, '*', pos_x, pos_y, false); // Quadrado preenchido
+
+        // Desenha o quadrado do Joystick
+        ssd1306_draw_char(&ssd, '*', 59+choice_display_x(joystick.vrx_value), 27+choice_display_y(joystick.vry_value), false); // Quadrado preenchido
+ 
+        //printf("Display x: %d | Display Y: %d\n", choice_display_x(vrx_value), choice_display_y(vry_value));
+ 
+        ssd1306_send_data(&ssd); // Atualiza o display
 
         sleep_ms(1);
     }

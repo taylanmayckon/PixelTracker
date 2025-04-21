@@ -180,11 +180,20 @@ void ssd1306_draw_char(ssd1306_t *ssd, char c, uint8_t x, uint8_t y, bool invers
   else if(c == ':'){ // Dois pontos
     index = 66*8;
   }
-  else if(c == '>'){ // Simbolo para cima
+  else if(c == '<'){ // Simbolo para esquerda
     index = 67*8;
   }
-  else if(c == '<'){ // Simbolo para baixo
+  else if(c == '>'){ // Simbolo para direita
     index = 68*8;
+  }
+  else if(c == '-'){ // Traço
+    index = 69*8;
+  }
+  else if(c == ','){ // Pausado
+    index = 70*8;
+  }
+  else if(c == '+'){ // Jogando
+    index = 71*8;
   }
 
   // Aqui ele realiza a operação de inversão de cores do bit, caso seja solicitado

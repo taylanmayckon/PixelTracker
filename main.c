@@ -46,7 +46,16 @@ uint clkdiv = 125;
 uint32_t last_time = 0; 
 
 // Posições aleatórias do quadrado do jogo
-uint8_t pos_x=31, pos_y=0;
+uint8_t pos_x, pos_y;
+// Posições do joystick no display
+uint8_t joystick_displayx, joystick_displayy;
+
+// Variáveis de controle do game
+bool pause = false;
+uint score = 0;
+char converted_num; // Variável que armazena o número convertido em char
+char converted_string[3]; // String que armazena o número convertido, no formato a ser exibido no display
+
 
 // Definições para o I2C e display 
 #define I2C_PORT i2c1
@@ -65,19 +74,11 @@ void gpio_irq_handler(uint gpio, uint32_t events){
         last_time = current_time; 
 
         if(gpio == button.a){
-            pwm_set_gpio_level(buzzer.a, 300);
+            score = 0;
         }
 
         else if(gpio == button.b){
-            pwm_set_gpio_level(buzzer.a, 600);
-        }
-
-        else if(gpio == joystick.button){
-            pwm_set_gpio_level(buzzer.a, 0);
-            // Sorteia a posição do quadrado aleatório do game
-            pos_x = 31 + ((uint8_t)get_rand_32() % 56); // Aleatório no range [31,86] (86 por conta do limite do frame central)
-            pos_y = (uint8_t)get_rand_32() % 56; // Aleatório no range [0,55] (56 por conta do limite do frame central)
-            
+            pause = !pause;
         }
     }
 }
@@ -85,9 +86,14 @@ void gpio_irq_handler(uint gpio, uint32_t events){
 
 // Interrupção do repeating timer
 bool repeating_timer_callback(struct repeating_timer *t){
-    printf("\n-> Nova transmissão\n");
-
-    printf("(JOYSTICK) X: %u | Y: %u", joystick.vrx_value, joystick.vry_value);
+    printf("(JOYSTICK) X: %u | Y: %u\n", joystick.vrx_value, joystick.vry_value);
+    printf("(SCORE) %d\n", score);
+    if(pause){
+        printf("(STATUS) PAUSADO\n");
+    }
+    else{
+        printf("(STATUS) JOGANDO\n");
+    }
     printf("\n");
     return true; // Retorna true para repetir a interrupção
 }
@@ -121,6 +127,64 @@ int choice_display_y(int joy_input){
         return -(joy_input-2048)/(2047/27);
     }
 }
+
+// Função que converte int para char
+void int_2_char(int num, char *out){
+    *out = '0' + num;
+}
+
+void int_2_string(int num){
+    if(num<9){ // Gera string para as menores que 10
+        int_2_char(num, &converted_num); // Converte o dígito à direita do número para char
+        converted_string[0] = '0'; // Char para melhorar o visual
+        converted_string[1] = converted_num; // Int convertido para char
+        converted_string[2] = '\0'; // Terminador nulo da String 
+    }
+    else{ // Gera a string para as maiores/iguais que 10
+        int divider = num/10; // Obtém as dezenas
+        int_2_char(divider, &converted_num);
+        converted_string[0] = converted_num;
+
+        int_2_char(num%10, &converted_num); // Obtém a parte das unidades
+        converted_string[1] = converted_num; // Int convertido para char
+        converted_string[2] = '\0'; // Terminador nulo da String
+    }
+}
+
+// Função para gerar o frame principal do game
+bool game_frame(){
+    // Desenhando o frame do jogo
+    ssd1306_rect(&ssd, 0, 31, 64, 64, cor, !cor);
+    // Desenha o quadrado aleatório do game
+    ssd1306_draw_char(&ssd, '*', pos_x, pos_y, false); // Quadrado preenchido
+    // Desenha o quadrado do Joystick
+    ssd1306_draw_char(&ssd, '*', joystick_displayx, joystick_displayy, false); // Quadrado preenchido
+}
+
+bool left_frame(){
+    ssd1306_draw_string(&ssd, "SCR", 4, 4, false);
+    int_2_string(score); // Converte a pontuação int em string
+    ssd1306_draw_string(&ssd, converted_string, 4, 14, false);
+
+    ssd1306_draw_string(&ssd, "RST", 4, 43, false);
+    ssd1306_draw_string(&ssd, "<-", 8, 53, false);
+}
+
+bool right_frame(){
+    ssd1306_draw_string(&ssd, "STS", 99, 4, false);
+    if(pause){
+        ssd1306_draw_char(&ssd, ',', 107, 14, false);
+    }
+    else{ssd1306_draw_char(&ssd, '+', 107, 14, false);
+
+    }
+
+    ssd1306_draw_string(&ssd, "PSE", 99, 43, false);
+    ssd1306_draw_string(&ssd, "->", 103, 53, false);
+}
+
+
+
 
 int main(){
     stdio_init_all();
@@ -176,41 +240,56 @@ int main(){
     // Configurnado o repeating timer
     uint16_t atraso = 1000;
     add_repeating_timer_ms(atraso, repeating_timer_callback, NULL, &timer);
+
+    // Sorteia a posição inicial do quadrado aleatório do game
+    pos_x = 35 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [35,81] (range curto por conta do limite do joystick)
+    pos_y = 4 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [4,51] (range curto por conta do limite do joystick)
     
 
     while (true) {
-        // Leitura do Eixo X (Canal 1)
-        adc_select_input(1);
-        joystick.vrx_value = adc_read();
-        // Leitura do Eixo Y (Canal 0)
-        adc_select_input(0);
-        joystick.vry_value = adc_read();
+        // Condição para só atualizar o game quando não estiver pausado
+        if(!pause){
+            // Leitura do Eixo X (Canal 1)
+            adc_select_input(1);
+            joystick.vrx_value = adc_read();
+            // Leitura do Eixo Y (Canal 0)
+            adc_select_input(0);
+            joystick.vry_value = adc_read();
 
-        // Deadzone para os joysticks
-        if (joystick.vry_value>=1900 && joystick.vry_value<=2194){
-            joystick.vry_value=2048;
-        }
-        if (joystick.vrx_value>=1900 && joystick.vrx_value<=2194){
-            joystick.vrx_value=2048;
-        }
+            // Deadzone para os joysticks
+            if (joystick.vry_value>=1900 && joystick.vry_value<=2194){
+                joystick.vry_value=2048;
+            }
+            if (joystick.vrx_value>=1900 && joystick.vrx_value<=2194){
+                joystick.vrx_value=2048;
+            }
 
+            // Calcula a posição do Joystick no display
+            joystick_displayx = 59+choice_display_x(joystick.vrx_value);
+            joystick_displayy = 27+choice_display_y(joystick.vry_value);
+
+            // Verifica se acertou o quadrado aleatório do game
+            if(joystick_displayx == pos_x && joystick_displayy == pos_y){
+                // Aumenta o score
+                score++;
+                // Sorteia a nova posição do quadrado aleatório do game
+                pos_x = 35 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [35,81] (range curto por conta do limite do joystick)
+                pos_y = 4 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [4,51] (range curto por conta do limite do joystick)
+            }
+        }
 
         // DISPLAY I2C
         // Limpa o display
         ssd1306_fill(&ssd, false);
-        // Desenhando o frame do jogo
-        ssd1306_rect(&ssd, 0, 31, 64, 64, cor, !cor);
+        
+        // Gera o frame atualizado do game
+        game_frame();
+        // Parte esquerda do display
+        left_frame();
+        // Parte direita do display
+        right_frame();
 
-        // Desenha o quadrado aleatório do game
-        ssd1306_draw_char(&ssd, '*', pos_x, pos_y, false); // Quadrado preenchido
-
-        // Desenha o quadrado do Joystick
-        ssd1306_draw_char(&ssd, '*', 59+choice_display_x(joystick.vrx_value), 27+choice_display_y(joystick.vry_value), false); // Quadrado preenchido
- 
-        //printf("Display x: %d | Display Y: %d\n", choice_display_x(vrx_value), choice_display_y(vry_value));
- 
         ssd1306_send_data(&ssd); // Atualiza o display
-
         sleep_ms(1);
     }
 }

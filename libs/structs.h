@@ -1,5 +1,7 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
+#include <stdint.h>
+
 
 typedef struct {
     int red;
@@ -15,7 +17,14 @@ typedef struct{
 typedef struct {
     int a;
     int b;
-    int joystick;
 } BUTTONS;
+
+typedef struct {
+    int x_pin;
+    int y_pin;
+    int button;
+    volatile uint16_t vrx_value;
+    volatile uint16_t vry_value;
+} JOY;
 
 #endif

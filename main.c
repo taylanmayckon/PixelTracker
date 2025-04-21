@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "include/structs.h"
+#include "libs/structs.h"
 #include "hardware/pwm.h"
+#include "hardware/adc.h"
 
 // Definindo os pinos do Led RGB
 LEDs rgb = { 
@@ -14,7 +15,6 @@ LEDs rgb = {
 BUTTONS button = {
     .a = 5,
     .b = 6,
-    .joystick = 22
 };
 
 // Definindo os pinos dos buzzers
@@ -23,16 +23,23 @@ BUZZERS buzzer = {
     .b = 10,
 };
 
+JOY joystick = {
+    .x_pin = 27,
+    .y_pin = 26,
+    .button = 22
+};
+
 // Definindo a máscara para ativar a output GPIO 
 #define OUTPUT_MASK ((1 << rgb.blue) | (1 << rgb.green) | (1 << rgb.red))
 // Definindo a máscara para ativar a input GPIO
-#define INPUT_MASK ((1 << button.a) | (1 << button.b))
+#define INPUT_MASK ((1 << button.a) | (1 << button.b) | (1 << joystick.button))
 
 // Variáveis do PWM
 uint wrap = 2047;
 uint clkdiv = 125;
 
-uint32_t last_time = 0;
+// Variável para o debounce (armazena tempo)
+uint32_t last_time = 0; 
 
 // Função de interrupção da GPIO
 void gpio_irq_handler(uint gpio, uint32_t events){
@@ -49,10 +56,20 @@ void gpio_irq_handler(uint gpio, uint32_t events){
             pwm_set_gpio_level(buzzer.a, 600);
         }
 
-        else if(gpio == button.joystick){
+        else if(gpio == joystick.button){
             pwm_set_gpio_level(buzzer.a, 0);
         }
     }
+}
+
+
+// Interrupção do repeating timer
+bool repeating_timer_callback(struct repeating_timer *t){
+    printf("\n-> Nova transmissão\n");
+
+    printf("(JOYSTICK) X: %u | Y: %u", joystick.vrx_value, joystick.vry_value);
+    printf("\n");
+    return true; // Retorna true para repetir a interrupção
 }
 
 
@@ -73,10 +90,9 @@ int main(){
     // Definindo como saída
     gpio_set_dir_out_masked(OUTPUT_MASK);
 
-    // Inicializando o PWM dos buzzers
+    // Inicializando o PWM dos buzzers zerado
     buzzer_init(buzzer.a, wrap);
     buzzer_init(buzzer.b, wrap);
-
     pwm_set_gpio_level(buzzer.a, 0);
     pwm_set_gpio_level(buzzer.b, 0);
 
@@ -85,19 +101,42 @@ int main(){
     // Habilitando os pull ups internos
     gpio_pull_up(button.a);
     gpio_pull_up(button.b);
-    gpio_pull_up(button.joystick);
+    gpio_pull_up(joystick.button);
     
     // Configurando a interrupção de GPIO
     gpio_set_irq_enabled_with_callback(button.a, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled_with_callback(button.b, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
-    gpio_set_irq_enabled_with_callback(button.joystick, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+    gpio_set_irq_enabled_with_callback(joystick.button, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+    
+    // Configurando o ADC
+    adc_init();
+    adc_gpio_init(joystick.x_pin); // Canal 1
+    adc_gpio_init(joystick.y_pin); // Canal 0
+
+    // Configurando a interrupção do repeating timer para envio via UART
+    // Configurando um temporizador de repetição
+    struct repeating_timer timer;
+    // Configurnado o repeating timer
+    uint16_t atraso = 1000;
+    add_repeating_timer_ms(atraso, repeating_timer_callback, NULL, &timer);
     
 
     while (true) {
-        /*
-        gpio_put(rgb.blue, 1);
-        gpio_put(rgb.red, 1);
-        gpio_put(rgb.green, 1);
-        */
+        // Leitura do Eixo X (Canal 1)
+        adc_select_input(1);
+        joystick.vrx_value = adc_read();
+        // Leitura do Eixo Y (Canal 0)
+        adc_select_input(0);
+        joystick.vry_value = adc_read();
+
+        // Deadzone para os joysticks
+        if (joystick.vry_value>=1900 && joystick.vry_value<=2194){
+            joystick.vry_value=2048;
+        }
+        if (joystick.vrx_value>=1900 && joystick.vrx_value<=2194){
+            joystick.vrx_value=2048;
+        }
+
+        sleep_ms(1);
     }
 }

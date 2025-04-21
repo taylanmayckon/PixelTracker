@@ -35,10 +35,13 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(ProjetoRevisao main.c libs/ssd1306.c)
+add_executable(ProjetoRevisao main.c libs/ssd1306.c libs/led_matrix.c)
 
 pico_set_program_name(ProjetoRevisao "ProjetoRevisao")
 pico_set_program_version(ProjetoRevisao "0.1")
+
+# Adicionando o arquivo PIO
+pico_generate_pio_header(ProjetoRevisao ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR}/generated)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(ProjetoRevisao 1)
@@ -50,7 +53,10 @@ target_link_libraries(ProjetoRevisao
         hardware_pwm
         hardware_adc
         hardware_i2c
-        pico_rand)
+        pico_rand
+        hardware_pio
+        hardware_clocks
+        )
 
 # Add the standard include files to the build
 target_include_directories(ProjetoRevisao PRIVATE

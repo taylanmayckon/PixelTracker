@@ -7,6 +7,10 @@
 #include "libs/ssd1306.h"
 #include "hardware/i2c.h"
 #include "pico/rand.h"
+#include "libs/led_matrix.h"
+#include "hardware/pio.h"
+#include "hardware/clocks.h"
+#include "hardware/timer.h"
 
 // Definindo os pinos do Led RGB
 LEDs rgb = { 
@@ -36,6 +40,64 @@ JOY joystick = {
 // Definindo a máscara para ativar a input GPIO
 #define INPUT_MASK ((1 << button.a) | (1 << button.b) | (1 << joystick.button))
 
+// Variáveis da PIO declaradas no escopo global
+PIO pio;
+uint sm;
+// Constantes para a matriz de leds
+#define IS_RGBW false
+#define LED_MATRIX_PIN 7
+
+// Vetor com todos LEDs apagados para a matriz 
+bool matrix_off[25] = {
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+};
+
+// Vetor com todos LEDs acesos para a matriz 
+bool matrix_on[25] = {
+    1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1,
+};
+
+// Vetor apontando para superior direito
+bool matrix_upper_right[25] = {
+    0, 0, 1, 1, 1,
+    0, 0, 0, 1, 1,
+    0, 0, 1, 0, 1,
+    0, 1, 0, 0, 0,
+    1, 0, 0, 0, 0,
+};
+// Vetor apontando para superior esquerdo
+bool matrix_upper_left[25] = {
+    1, 1, 1, 0, 0,
+    1, 1, 0, 0, 0,
+    1, 0, 1, 0, 0,
+    0, 0, 0, 1, 0,
+    0, 0, 0, 0, 1,
+};
+// Vetor apontando para bottom direito
+bool matrix_bottom_right[25] = {
+    1, 0, 0, 0, 0,
+    0, 1, 0, 0, 0,
+    0, 0, 1, 0, 1,
+    0, 0, 0, 1, 1,
+    0, 0, 1, 1, 1,
+};
+// Vetor apontando para superior esquerdo
+bool matrix_upper_left[25] = {
+    0, 0, 0, 0, 1,
+    0, 0, 0, 1, 0,
+    1, 0, 1, 0, 0,
+    1, 1, 0, 0, 0,
+    1, 1, 1, 0, 0,
+};
+
 // Variáveis do PWM
 uint wrap = 2047;
 uint clkdiv = 125;
@@ -64,6 +126,27 @@ ssd1306_t ssd; // Inicializa a estrutura do display no escopo global
 bool cor = true; // Booleano que indica a cor branca do pixel
 
 
+
+// Função que interpreta a posição do eixo X no display
+int choice_display_x(int joy_input){
+    if(joy_input < 2048){
+        return -(2047-joy_input)/(2047/27);
+    }
+    else{
+        return (joy_input-2048)/(2047/27);
+    }
+}
+
+// Função que interpreta a posição do eixo Y no display
+int choice_display_y(int joy_input){
+    if(joy_input < 2048){
+        return (2047-joy_input)/(2047/27);
+    }
+    else{
+        return -(joy_input-2048)/(2047/27);
+    }
+}
+
 // Função de interrupção da GPIO
 void gpio_irq_handler(uint gpio, uint32_t events){
     // Obtendo tempo atual (em us)
@@ -73,6 +156,9 @@ void gpio_irq_handler(uint gpio, uint32_t events){
 
         if(gpio == button.a){
             score = 0;
+            // Sorteia a nova posição do quadrado aleatório do game
+            pos_x = 35 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [35,81] (range curto por conta do limite do joystick)
+            pos_y = 4 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [4,51] (range curto por conta do limite do joystick)
         }
 
         else if(gpio == button.b){
@@ -110,11 +196,14 @@ int64_t turn_off_callback(alarm_id_t id, void *user_data){
     }
 
     if(callback_count%2 == 0){
+        // Atualiza os alertas que dependem de PWM
         pwm_set_gpio_level(rgb.blue, 300);
         pwm_set_gpio_level(rgb.green, 300);
         pwm_set_gpio_level(rgb.red, 300);
         pwm_set_gpio_level(buzzer.a, 300);
         pwm_set_gpio_level(buzzer.b, 300);
+        // Atualiza a matriz de leds endereçáveis (ON)
+        atualiza_vagas(matrix_on);
     }
     else{
         pwm_set_gpio_level(rgb.blue, 0);
@@ -122,6 +211,8 @@ int64_t turn_off_callback(alarm_id_t id, void *user_data){
         pwm_set_gpio_level(rgb.red, 0);
         pwm_set_gpio_level(buzzer.a, 0);
         pwm_set_gpio_level(buzzer.b, 0);
+        // Atualiza a matriz de leds endereçáveis (OFF)
+        atualiza_vagas(matrix_off);
     }
 
     callback_count++;
@@ -138,26 +229,6 @@ void buzzer_init(uint gpio, uint wrap){
     pwm_set_clkdiv(slice_num, clkdiv);
     pwm_set_wrap(slice_num, wrap);
     pwm_set_enabled(slice_num, true); 
-}
-
-// Função que interpreta a posição do eixo X no display
-int choice_display_x(int joy_input){
-    if(joy_input < 2048){
-        return -(2047-joy_input)/(2047/27);
-    }
-    else{
-        return (joy_input-2048)/(2047/27);
-    }
-}
-
-// Função que interpreta a posição do eixo Y no display
-int choice_display_y(int joy_input){
-    if(joy_input < 2048){
-        return (2047-joy_input)/(2047/27);
-    }
-    else{
-        return -(joy_input-2048)/(2047/27);
-    }
 }
 
 // Função que converte int para char
@@ -275,6 +346,12 @@ int main(){
     // Configurnado o repeating timer
     uint16_t atraso = 1000;
     add_repeating_timer_ms(atraso, repeating_timer_callback, NULL, &timer);
+
+    // Inicializando a PIO
+    pio = pio0;
+    sm = 0;
+    uint offset = pio_add_program(pio, &ws2812_program);
+    ws2812_program_init(pio, sm, offset, LED_MATRIX_PIN, 800000, IS_RGBW);
 
     // Sorteia a posição inicial do quadrado aleatório do game
     pos_x = 35 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [35,81] (range curto por conta do limite do joystick)

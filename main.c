@@ -55,7 +55,7 @@ bool pause = false;
 uint score = 0;
 char converted_num; // Variável que armazena o número convertido em char
 char converted_string[3]; // String que armazena o número convertido, no formato a ser exibido no display
-
+int callback_count = 0;
 
 // Definições para o I2C e display 
 #define I2C_PORT i2c1
@@ -96,6 +96,40 @@ bool repeating_timer_callback(struct repeating_timer *t){
     }
     printf("\n");
     return true; // Retorna true para repetir a interrupção
+}
+
+// Função de callback para alertar que pontuou 
+// Ativa buzzer, led RGB e matriz
+int64_t turn_off_callback(alarm_id_t id, void *user_data){
+    // Condição de parada
+    if(callback_count == 10){
+        // Reseta o contador
+        callback_count = 0;
+        // Para o buzzer
+        
+        
+        return 0; // Retorno da função
+    }
+
+    if(callback_count%2 == 0){
+        gpio_put(rgb.blue, 1);
+        gpio_put(rgb.red, 1);
+        gpio_put(rgb.green, 1);
+        pwm_set_gpio_level(buzzer.a, 300);
+        pwm_set_gpio_level(buzzer.b, 300);
+    }
+    else{
+        gpio_put(rgb.blue, 0);
+        gpio_put(rgb.red, 0);
+        gpio_put(rgb.green, 0);
+        pwm_set_gpio_level(buzzer.a, 0);
+        pwm_set_gpio_level(buzzer.b, 0);
+    }
+
+    callback_count++;
+    
+    add_alarm_in_ms(50, turn_off_callback, NULL, false);
+    return 0;
 }
 
 
@@ -272,6 +306,10 @@ int main(){
             if(joystick_displayx == pos_x && joystick_displayy == pos_y){
                 // Aumenta o score
                 score++;
+
+                // Ativa os alertas sonoros/visuais da pontuação
+                add_alarm_in_ms(1, turn_off_callback, NULL, false);
+
                 // Sorteia a nova posição do quadrado aleatório do game
                 pos_x = 35 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [35,81] (range curto por conta do limite do joystick)
                 pos_y = 4 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [4,51] (range curto por conta do limite do joystick)

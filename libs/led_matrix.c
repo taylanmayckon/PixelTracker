@@ -49,21 +49,21 @@ void set_leds(uint8_t r, uint8_t g, uint8_t b){
 }
 
 // Função que faz as operações necessárias para atualizar o display
-void atualiza_vagas(bool *spots_info){
+void update_matrix(bool *input_matrix){
     // Ordenando corretamente o vetor recebido no buffer
     int j = 0; // Variável para controle do index espelhado
     for(int i=0; i<25; i++){
         if(i>4 && i<10){
-            led_buffer[i] = spots_info[9-j];
+            led_buffer[i] = input_matrix[9-j];
             j++;
         }
         else if(i>14 && i<20){
-            led_buffer[i] = spots_info[19-j];
+            led_buffer[i] = input_matrix[19-j];
             j++;
         }
         else{
             j=0;
-            led_buffer[i] = spots_info[i];
+            led_buffer[i] = input_matrix[i];
         }
     }
 

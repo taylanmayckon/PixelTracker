@@ -18,6 +18,6 @@ uint32_t urgb_u32(double r, double g, double b);
 
 void set_leds(uint8_t r, uint8_t g, uint8_t b);
 
-void atualiza_vagas(bool *spots_info);
+void update_matrix(bool *input_matrix);
 
 #endif

@@ -90,7 +90,7 @@ bool matrix_bottom_right[25] = {
     0, 0, 1, 1, 1,
 };
 // Vetor apontando para superior esquerdo
-bool matrix_upper_left[25] = {
+bool matrix_bottom_left[25] = {
     0, 0, 0, 0, 1,
     0, 0, 0, 1, 0,
     1, 0, 1, 0, 0,
@@ -203,7 +203,7 @@ int64_t turn_off_callback(alarm_id_t id, void *user_data){
         pwm_set_gpio_level(buzzer.a, 300);
         pwm_set_gpio_level(buzzer.b, 300);
         // Atualiza a matriz de leds endereçáveis (ON)
-        atualiza_vagas(matrix_on);
+        update_matrix(matrix_on);
     }
     else{
         pwm_set_gpio_level(rgb.blue, 0);
@@ -212,7 +212,7 @@ int64_t turn_off_callback(alarm_id_t id, void *user_data){
         pwm_set_gpio_level(buzzer.a, 0);
         pwm_set_gpio_level(buzzer.b, 0);
         // Atualiza a matriz de leds endereçáveis (OFF)
-        atualiza_vagas(matrix_off);
+        update_matrix(matrix_off);
     }
 
     callback_count++;
@@ -393,6 +393,31 @@ int main(){
                 pos_y = 4 + ((uint8_t)get_rand_32() % 51); // Aleatório no range [4,51] (range curto por conta do limite do joystick)
             }
         }
+
+        // MATRIZ DE LEDS (INDICATIVO DIREÇÃO)
+        // Lado esquerdo
+        if(pos_x<=63){
+            // Lado superior
+            if(pos_y<=31){
+                update_matrix(matrix_upper_left);
+            }
+            // Lado inferior
+            else{
+                update_matrix(matrix_bottom_left);
+            }
+        }
+        // Canto direito
+        else{
+            // Lado superior
+            if(pos_y<=31){
+                update_matrix(matrix_upper_right);
+            }
+            // Lado inferior
+            else{
+                update_matrix(matrix_bottom_right);
+            }
+        }
+
 
         // DISPLAY I2C
         // Limpa o display

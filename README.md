@@ -48,3 +48,4 @@ Este projeto é a atividade de revisão da Fase 2 do EmbarcaTech. Consiste em um
 ---
 
 ## 📽️ **Vídeo no YouTube**
+[Link](https://drive.google.com/file/d/1CBcRcgt1h5qgU2nHKVm_cDSkCQPpzC1Z/view?usp=sharing)
